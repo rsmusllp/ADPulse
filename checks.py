@@ -20,6 +20,7 @@ New checks      : 25–35
 import datetime
 import os
 import socket
+import struct
 import urllib.request
 import xml.etree.ElementTree as ET
 from typing import List, Tuple, Dict, Any
@@ -305,65 +306,290 @@ def _fmt_tmpl(name: str, enrollees: list) -> str:
     return name
 
 
+# # ── SMB probes ─────────────────────────────────────────────────────────────────
+
+# def _smb1_negotiate(ip: str, timeout: float = 3.0) -> bool:
+#     smb1_negotiate = (
+#         b"\x00\x00\x00\x54" b"\xff\x53\x4d\x42" b"\x72"
+#         b"\x00\x00\x00\x00" b"\x18" b"\x01\x28" b"\x00\x00"
+#         b"\x00\x00\x00\x00\x00\x00\x00\x00" b"\x00\x00"
+#         b"\xff\xff" b"\xfe\xff" b"\x00\x00" b"\x00\x00" b"\x00"
+#         b"\x0c\x00" b"\x02" b"\x4e\x54\x20\x4c\x4d\x20\x30\x2e\x31\x32\x00"
+#     )
+#     try:
+#         import struct
+#         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#             s.settimeout(timeout)
+#             s.connect((ip, 445))
+#             s.sendall(smb1_negotiate)
+#             resp = s.recv(256)
+#             if len(resp) >= 9 and resp[4:8] == b"\xff\x53\x4d\x42" and resp[8] == 0x72:
+#                 return struct.unpack_from("<I", resp, 9)[0] == 0
+#     except Exception:
+#         pass
+#     return False
+
+
+# def _check_smb_signing(ip: str, timeout: float = 3.0) -> str:
+#     import struct
+#     smb2_negotiate = (
+#         b"\x00\x00\x00\x54" b"\xfeSMB" b"\x40\x00" b"\x00\x00"
+#         b"\x00\x00\x00\x00" b"\x00\x00" b"\x1f\x00" b"\x00\x00\x00\x00"
+#         b"\x00\x00\x00\x00" b"\x00\x00\x00\x00\x00\x00\x00\x00"
+#         b"\x00\x00\x00\x00" b"\xff\xff\xff\xff"
+#         b"\x00\x00\x00\x00\x00\x00\x00\x00"
+#         b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+#         b"\x24\x00" b"\x01\x00" b"\x00\x00" b"\x00\x00" b"\x00\x00\x00\x00"
+#         b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+#         b"\x00\x00\x00\x00" b"\x02\x02"
+#     )
+#     try:
+#         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#             s.settimeout(timeout)
+#             s.connect((ip, 445))
+#             s.sendall(smb2_negotiate)
+#             resp = s.recv(512)
+#             if not resp:
+#                 return "smb2_disabled"
+#             if len(resp) >= 72 and resp[4:8] == b"\xfeSMB":
+#                 if struct.unpack_from("<I", resp, 8)[0] == 0:
+#                     sec_mode = struct.unpack_from("<H", resp, 70)[0]
+#                     if sec_mode & 0x02:   return "required"
+#                     if sec_mode & 0x01:   return "enabled_not_required"
+#                     return "disabled"
+#             return "smb2_disabled"
+#     except socket.timeout:         return "smb2_disabled"
+#     except ConnectionRefusedError: return "unreachable"
+#     except Exception:              return "smb2_disabled"
+
+
+# def _check_null_session(ip: str, timeout: float = 3.0) -> bool:
+#     import struct
+#     null_session_pkt = (
+#         b"\x00\x00\x00\x59" b"\xff\x53\x4d\x42" b"\x73"
+#         b"\x00\x00\x00\x00" b"\x18" b"\x07\xc0" b"\x00\x00"
+#         b"\x00\x00\x00\x00\x00\x00\x00\x00" b"\x00\x00"
+#         b"\xff\xff" b"\xff\xfe" b"\x00\x00" b"\x40\x00"
+#         b"\x0d" b"\xff" b"\x00" b"\x00\x00" b"\xff\x00"
+#         b"\x02\x00" b"\x01\x00" b"\x00\x00\x00\x00"
+#         b"\x00\x00" b"\x00\x00" b"\x00\x00\x00\x00"
+#         b"\x60\x48\x06\x06" b"\x11\x00" b"\x00" b"\x00"
+#         b"\x57\x69\x6e\x64\x6f\x77\x73\x00"
+#         b"\x57\x69\x6e\x64\x6f\x77\x73\x00"
+#     )
+#     try:
+#         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#             s.settimeout(timeout)
+#             s.connect((ip, 445))
+#             s.sendall(null_session_pkt)
+#             resp = s.recv(256)
+#             if len(resp) >= 13 and resp[4:8] == b"\xff\x53\x4d\x42":
+#                 return struct.unpack_from("<I", resp, 9)[0] == 0
+#     except Exception:
+#         pass
+#     return False
+
+
+# def _check_smb1_hosts(ad: ADConnector) -> tuple:
+#     targets = {ad.dc_ip: ad.dc_ip}
+#     computers = ad.search(
+#         "(&(objectClass=computer)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))",
+#         ["dNSHostName", "sAMAccountName"])
+#     for c in computers:
+#         host = ad.attr_str(c, "dNSHostName") or ad.attr_str(c, "sAMAccountName").rstrip("$")
+#         if host and host not in targets:
+#             targets[host] = host
+#     print(f"    Probing {len(targets)} host(s) for SMBv1 / signing / null sessions...")
+#     smb1_vuln, signing_issues, null_sessions = [], [], []
+#     for label, host in targets.items():
+#         try:
+#             ip = socket.gethostbyname(host)
+#         except Exception:
+#             continue
+#         if _smb1_negotiate(ip):
+#             smb1_vuln.append(label)
+#         sign = _check_smb_signing(ip)
+#         if   sign == "disabled":             signing_issues.append(f"{label} (signing disabled)")
+#         elif sign == "enabled_not_required": signing_issues.append(f"{label} (signing enabled but not required)")
+#         elif sign == "smb2_disabled":        signing_issues.append(f"{label} (SMB2 disabled -- signing cannot be verified)")
+#         if _check_null_session(ip):
+#             null_sessions.append(label)
+#     return smb1_vuln, signing_issues, null_sessions
+
 # ── SMB probes ─────────────────────────────────────────────────────────────────
 
+_SMB2_DIALECT_MAP = {
+    0x0202: "SMB 2.0.2",
+    0x0210: "SMB 2.1",
+    0x0300: "SMB 3.0",
+    0x0302: "SMB 3.0.2",
+    0x0311: "SMB 3.1.1",
+}
+
+_SMB1_NEGOTIATE_PKT = (
+    b"\x00\x00\x00\x2f"
+    b"\xff\x53\x4d\x42"                          # \xffSMB
+    b"\x72"                                      # Command: Negotiate
+    b"\x00\x00\x00\x00"                          # NT Status
+    b"\x18\x01\x28"                              # Flags / Flags2
+    b"\x00\x00"                                  # PID High
+    b"\x00\x00\x00\x00\x00\x00\x00\x00"         # Security signature
+    b"\x00\x00\xff\xff\xfe\xff\x00\x00\x00\x00" # Reserved/TID/PID/UID/MID
+    b"\x00"                                      # Word count
+    b"\x0c\x00"                                  # Byte count
+    b"\x02NT LM 0.12\x00"                        # Dialect
+)
+
+
+def _smb_recv(sock: socket.socket, length: int) -> bytes:
+    buf = b""
+    while len(buf) < length:
+        chunk = sock.recv(length - len(buf))
+        if not chunk:
+            break
+        buf += chunk
+    return buf
+
+
+def _is_conn_reset(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return ("10054" in msg or "connection was forcibly closed" in msg
+            or "connection reset" in msg or "econnreset" in msg)
+
+
 def _smb1_negotiate(ip: str, timeout: float = 3.0) -> bool:
-    smb1_negotiate = (
-        b"\x00\x00\x00\x54" b"\xff\x53\x4d\x42" b"\x72"
-        b"\x00\x00\x00\x00" b"\x18" b"\x01\x28" b"\x00\x00"
-        b"\x00\x00\x00\x00\x00\x00\x00\x00" b"\x00\x00"
-        b"\xff\xff" b"\xfe\xff" b"\x00\x00" b"\x00\x00" b"\x00"
-        b"\x0c\x00" b"\x02" b"\x4e\x54\x20\x4c\x4d\x20\x30\x2e\x31\x32\x00"
-    )
+    """Return True only if the server responds with a successful SMBv1 negotiate."""
     try:
-        import struct
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(timeout)
             s.connect((ip, 445))
-            s.sendall(smb1_negotiate)
-            resp = s.recv(256)
-            if len(resp) >= 9 and resp[4:8] == b"\xff\x53\x4d\x42" and resp[8] == 0x72:
-                return struct.unpack_from("<I", resp, 9)[0] == 0
+            s.sendall(_SMB1_NEGOTIATE_PKT)
+            nb = _smb_recv(s, 4)
+            if len(nb) < 4:
+                return False
+            body_len = struct.unpack(">I", nb)[0] & 0x00FFFFFF
+            body     = _smb_recv(s, min(body_len, 256))
+            if len(body) < 9:
+                return False
+            # \xffSMB + 0x72 (negotiate response) + NT Status 0x00000000
+            return (body[0:4] == b"\xff\x53\x4d\x42"
+                    and body[4] == 0x72
+                    and struct.unpack_from("<I", body, 5)[0] == 0)
     except Exception:
-        pass
-    return False
+        return False
 
 
-def _check_smb_signing(ip: str, timeout: float = 3.0) -> str:
-    import struct
-    smb2_negotiate = (
-        b"\x00\x00\x00\x54" b"\xfeSMB" b"\x40\x00" b"\x00\x00"
-        b"\x00\x00\x00\x00" b"\x00\x00" b"\x1f\x00" b"\x00\x00\x00\x00"
-        b"\x00\x00\x00\x00" b"\x00\x00\x00\x00\x00\x00\x00\x00"
-        b"\x00\x00\x00\x00" b"\xff\xff\xff\xff"
-        b"\x00\x00\x00\x00\x00\x00\x00\x00"
-        b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-        b"\x24\x00" b"\x01\x00" b"\x00\x00" b"\x00\x00" b"\x00\x00\x00\x00"
-        b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-        b"\x00\x00\x00\x00" b"\x02\x02"
+def _build_smb2_negotiate() -> bytes:
+    """
+    Build an SMB2 Negotiate Request offering dialects 2.0.2 – 3.1.1.
+
+    SMB 3.1.1 requires PREAUTH_INTEGRITY_CAPABILITIES (MS-SMB2 §2.2.3).
+
+    Response offsets (from byte 0 of TCP payload, after NetBIOS header):
+      0– 3  ProtocolId (\xfeSMB)
+      4– 5  StructureSize = 64
+      6– 7  CreditCharge
+      8–11  NT Status
+     12–13  Command
+      ...
+     64–65  [body] StructureSize = 65
+     66–67  [body] SecurityMode     bit 0x01 = enabled, 0x02 = required
+     68–69  [body] DialectRevision
+    """
+    dialects      = (0x0202, 0x0210, 0x0300, 0x0302, 0x0311)
+    dialect_bytes = b"".join(struct.pack("<H", d) for d in dialects)
+
+    # PREAUTH_INTEGRITY_CAPABILITIES context (SHA-512, type 0x0001)
+    preauth_data = struct.pack("<HHH", 1, 0, 0x0001)           # 6 bytes
+    neg_ctx      = (struct.pack("<HHI", 0x0001, len(preauth_data), 0)
+                    + preauth_data)                             # 14 bytes total
+
+    # NegotiateContextOffset is absolute from start of SMB2 header (64 bytes).
+    # Fixed body = 36, dialects = 10 → absolute 110; pad to 8-byte boundary → 112.
+    dialects_end   = 64 + 36 + len(dialect_bytes)              # 110
+    pad_len        = (8 - dialects_end % 8) % 8               # 2
+    neg_ctx_offset = dialects_end + pad_len                    # 112
+
+    body = (
+        struct.pack("<H",  36)              # StructureSize
+        + struct.pack("<H", len(dialects))  # DialectCount
+        + struct.pack("<H", 0x0001)         # SecurityMode: signing enabled
+        + struct.pack("<H", 0)              # Reserved
+        + struct.pack("<I", 0x0000007F)     # Capabilities
+        + b"\x00" * 16                      # ClientGuid
+        + struct.pack("<I", neg_ctx_offset) # NegotiateContextOffset
+        + struct.pack("<H", 1)              # NegotiateContextCount
+        + struct.pack("<H", 0)              # Reserved2
+        + dialect_bytes
+        + b"\x00" * pad_len                 # Alignment padding
+        + neg_ctx
     )
+
+    smb2_hdr = (
+        b"\xfeSMB"
+        + struct.pack("<H", 64)   # StructureSize
+        + b"\x00\x00"             # CreditCharge
+        + b"\x00\x00\x00\x00"    # Status
+        + b"\x00\x00"             # Command: Negotiate (0)
+        + b"\x1f\x00"             # CreditRequest
+        + b"\x00\x00\x00\x00"    # Flags
+        + b"\x00\x00\x00\x00"    # NextCommand
+        + b"\x00" * 8             # MessageId
+        + b"\x00" * 4             # Reserved
+        + b"\x00" * 4             # TreeId
+        + b"\x00" * 8             # SessionId
+        + b"\x00" * 16            # Signature
+    )
+
+    payload = smb2_hdr + body
+    return b"\x00" + len(payload).to_bytes(3, "big") + payload
+
+
+def _check_smb_signing(ip: str, timeout: float = 3.0) -> tuple:
+    """
+    Return (signing_status, smb_version).
+
+    signing_status : "required" | "enabled_not_required" | "disabled" |
+                     "smb2_disabled" | "unreachable" | "error"
+    smb_version    : e.g. "SMB 3.1.1", or None
+    """
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(timeout)
             s.connect((ip, 445))
-            s.sendall(smb2_negotiate)
-            resp = s.recv(512)
-            if not resp:
-                return "smb2_disabled"
-            if len(resp) >= 72 and resp[4:8] == b"\xfeSMB":
-                if struct.unpack_from("<I", resp, 8)[0] == 0:
-                    sec_mode = struct.unpack_from("<H", resp, 70)[0]
-                    if sec_mode & 0x02:   return "required"
-                    if sec_mode & 0x01:   return "enabled_not_required"
-                    return "disabled"
-            return "smb2_disabled"
-    except socket.timeout:         return "smb2_disabled"
-    except ConnectionRefusedError: return "unreachable"
-    except Exception:              return "smb2_disabled"
+            s.sendall(_build_smb2_negotiate())
+
+            nb = _smb_recv(s, 4)
+            if len(nb) < 4:
+                return "smb2_disabled", None
+            body_len = struct.unpack(">I", nb)[0] & 0x00FFFFFF
+            body     = _smb_recv(s, min(body_len, 512))
+
+            if len(body) < 68 or body[0:4] != b"\xfeSMB":
+                return "smb2_disabled", None
+
+            nt_status = struct.unpack_from("<I", body, 8)[0]
+            if nt_status != 0:
+                return "error", None
+
+            sec_mode     = struct.unpack_from("<H", body, 66)[0]
+            dialect_code = (struct.unpack_from("<H", body, 68)[0]
+                            if len(body) >= 70 else None)
+            ver          = (_SMB2_DIALECT_MAP.get(dialect_code)
+                            if dialect_code is not None else None)
+
+            if sec_mode & 0x02: return "required",             ver
+            if sec_mode & 0x01: return "enabled_not_required", ver
+            return "disabled", ver
+
+    except socket.timeout:         return "error",         None
+    except ConnectionRefusedError: return "unreachable",   None
+    except Exception as e:
+        if _is_conn_reset(e):      return "smb2_disabled", None
+        return "error",            None
 
 
 def _check_null_session(ip: str, timeout: float = 3.0) -> bool:
-    import struct
     null_session_pkt = (
         b"\x00\x00\x00\x59" b"\xff\x53\x4d\x42" b"\x73"
         b"\x00\x00\x00\x00" b"\x18" b"\x07\xc0" b"\x00\x00"
@@ -395,26 +621,39 @@ def _check_smb1_hosts(ad: ADConnector) -> tuple:
         "(&(objectClass=computer)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))",
         ["dNSHostName", "sAMAccountName"])
     for c in computers:
-        host = ad.attr_str(c, "dNSHostName") or ad.attr_str(c, "sAMAccountName").rstrip("$")
+        host = (ad.attr_str(c, "dNSHostName")
+                or ad.attr_str(c, "sAMAccountName").rstrip("$"))
         if host and host not in targets:
             targets[host] = host
+
     print(f"    Probing {len(targets)} host(s) for SMBv1 / signing / null sessions...")
     smb1_vuln, signing_issues, null_sessions = [], [], []
+
     for label, host in targets.items():
         try:
             ip = socket.gethostbyname(host)
         except Exception:
             continue
-        if _smb1_negotiate(ip):
+
+        has_smb1  = _smb1_negotiate(ip)
+        sign, ver = _check_smb_signing(ip)
+        ver_str   = ver if ver else "SMB2/3"
+
+        if has_smb1:
             smb1_vuln.append(label)
-        sign = _check_smb_signing(ip)
-        if   sign == "disabled":             signing_issues.append(f"{label} (signing disabled)")
-        elif sign == "enabled_not_required": signing_issues.append(f"{label} (signing enabled but not required)")
-        elif sign == "smb2_disabled":        signing_issues.append(f"{label} (SMB2 disabled -- signing cannot be verified)")
+
+        if sign == "disabled":
+            signing_issues.append(f"{label} ({ver_str}, signing disabled)")
+        elif sign == "enabled_not_required":
+            signing_issues.append(f"{label} ({ver_str}, signing enabled but not required)")
+        elif sign == "smb2_disabled" and has_smb1:
+            signing_issues.append(f"{label} (SMBv1 only — SMB2/3 signing cannot be verified)")
+        # "unreachable" / "error" → probe inconclusive, not a misconfiguration
+
         if _check_null_session(ip):
             null_sessions.append(label)
-    return smb1_vuln, signing_issues, null_sessions
 
+    return smb1_vuln, signing_issues, null_sessions
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ORIGINAL CHECKS 1–24
