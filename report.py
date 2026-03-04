@@ -1,4 +1,6 @@
+import base64
 import json
+import os
 from collections import defaultdict
 from models import ScanResult, SEVERITY_ORDER
 
@@ -610,6 +612,20 @@ def _build_new_checks_table_html(result: ScanResult) -> str:
 
 # ── HTML export ───────────────────────────────────────────────────────────────
 
+def _embed_logo() -> str:
+    """Return an <img> tag with the RSM logo embedded as a base64 data URI.
+    Falls back to an empty string if the file cannot be found."""
+    # Always look relative to this script's own directory, regardless of
+    # where the HTML report is being written.
+    logo_path = os.path.join(os.path.dirname(__file__), "images", "rsmlogo.jpg")
+    try:
+        with open(logo_path, "rb") as fh:
+            b64 = base64.b64encode(fh.read()).decode("ascii")
+        return f'<img src="data:image/jpeg;base64,{b64}" alt="RSM Logo">'
+    except FileNotFoundError:
+        return ""
+
+
 def export_html(result: ScanResult, path: str):
     counts = result.counts()
     score  = result.total_score
@@ -825,7 +841,7 @@ def export_html(result: ScanResult, path: str):
 
 <!-- RSM branded header bar -->
 <div class="report-header">
-  <img src="images/rsmlogo.jpg" alt="RSM Logo">
+  {_embed_logo()}
   <div class="header-divider"></div>
   <div class="header-title">
     <h1>Active Directory Security Report</h1>
