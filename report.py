@@ -25,6 +25,11 @@ SEV_BADGE_COLOR = {
     "INFO":     "#6b7280",
 }
 
+# RSM brand colors
+RSM_BLUE  = "#009cde"
+RSM_GREEN = "#5b8c3e"
+RSM_GRAY  = "#63666a"
+
 # Stats keys rendered in dedicated sections rather than the generic flat table
 _SPECIAL_STATS = {
     # original
@@ -216,7 +221,7 @@ def _cs(label: str, value, warn_above: int = 0):
 def print_report(result: ScanResult):
     W = 72
     print(f"\n{'='*W}")
-    print("  ADPulse ACTIVE DIRECTORY SECURITY SCAN REPORT")
+    print("  RSM Pulse ACTIVE DIRECTORY SECURITY SCAN REPORT")
     print(f"{'='*W}")
     print(f"  Domain      : {result.domain}")
     print(f"  DC          : {result.dc_ip}")
@@ -567,7 +572,7 @@ def _build_new_checks_table_html(result: ScanResult) -> str:
     rbcd_dc  = s.get("rbcd_on_dc_count", 0) or 0
 
     new_rows_html = f"""
-      <tr><td colspan="2" style="background:#0f1f35;color:#64748b;font-size:.78rem;
+      <tr><td colspan="2" style="background:#0a1f35;color:#64748b;font-size:.78rem;
           padding:6px 8px;letter-spacing:.04em">NEW CHECKS (25–35)</td></tr>
       <tr><td>GPP cpassword hits (MS14-025)</td><td>{gpp_cell}</td></tr>
       <tr><td>AdminSDHolder risky ACEs</td><td>{_int_cell(s.get("adminsdholder_risky_aces"), 0)}</td></tr>
@@ -698,12 +703,47 @@ def export_html(result: ScanResult, path: str):
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ADPulse Active Directory Security Report - {result.domain}</title>
+<title>RSM Pulse Active Directory Security Report - {result.domain}</title>
 <style>
   *{{box-sizing:border-box;margin:0;padding:0}}
-  body{{font-family:"Segoe UI",Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:2rem}}
-  h1{{color:#38bdf8;font-size:1.8rem;margin-bottom:.3rem}}
-  h2{{color:#94a3b8;font-size:1rem;font-weight:bold;margin:1.5rem 0 .5rem;
+  body{{font-family:"Segoe UI",Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:0}}
+  .report-header{{
+    background:#ffffff;
+    padding:1rem 2rem;
+    display:flex;
+    align-items:center;
+    gap:1.5rem;
+    border-bottom:4px solid #009cde;
+  }}
+  .report-header img{{height:52px;width:auto}}
+  .header-divider{{
+    width:2px;height:52px;
+    background:#009cde;
+    border-radius:1px;
+    flex-shrink:0;
+  }}
+  .header-title{{
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+  }}
+  .header-title h1{{
+    color:#63666a;
+    font-size:1.3rem;
+    font-weight:700;
+    letter-spacing:.01em;
+    line-height:1.2;
+  }}
+  .header-title .header-sub{{
+    color:#009cde;
+    font-size:.85rem;
+    font-weight:600;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    margin-top:.15rem;
+  }}
+  .report-body{{padding:2rem}}
+  h2{{color:#009cde;font-size:1rem;font-weight:bold;margin:1.5rem 0 .5rem;
       text-transform:uppercase;letter-spacing:.05em}}
   .meta{{color:#64748b;font-size:.9rem;margin-bottom:1rem}}
   .score-box{{display:inline-block;font-size:3rem;font-weight:900;color:{sc_col};
@@ -729,39 +769,47 @@ def export_html(result: ScanResult, path: str):
   .cat-section{{margin-bottom:.6rem;border:1px solid #1e293b;border-radius:8px;overflow:hidden}}
   .cat-header{{display:flex;align-items:center;gap:.7rem;padding:.7rem 1rem;
                background:#1e293b;cursor:pointer;user-select:none}}
-  .cat-header:hover{{background:#263348}}
+  .cat-header:hover{{background:#1a2f4a}}
   .cat-title{{font-weight:bold;font-size:1rem;flex:1}}
   .cat-count{{color:#64748b;font-size:.85rem}}
-  .chevron{{color:#64748b;font-size:.8rem;transition:transform .2s}}
+  .chevron{{color:#009cde;font-size:.8rem;transition:transform .2s}}
   .cat-body.collapsed{{display:none}}
   table{{width:100%;border-collapse:collapse;font-size:.85rem;table-layout:fixed}}
   th,td{{padding:8px;vertical-align:top;border-bottom:1px solid #1e293b;
          overflow-wrap:break-word;word-break:break-word}}
-  th{{background:#0f1f35;color:#94a3b8;text-align:left}}
-  tr:hover td{{background:#1a2740}}
+  th{{background:#0a1f35;color:#009cde;text-align:left}}
+  tr:hover td{{background:#1a2f4a}}
   .col-sev{{width:90px;white-space:nowrap}}
   .col-finding{{width:40%}}
   .col-rec{{color:#4ade80;font-size:.8rem}}
   .col-score{{width:52px;text-align:center;font-weight:bold;white-space:nowrap}}
   .badge{{color:#fff;padding:2px 8px;border-radius:4px;font-size:.75rem;white-space:nowrap}}
   .desc{{color:#94a3b8;font-size:.8rem}}
-  .ref{{display:block;color:#38bdf8;font-size:.75rem;word-break:break-all;margin-top:2px}}
+  .ref{{display:block;color:#009cde;font-size:.75rem;word-break:break-all;margin-top:2px}}
   ul{{margin:.3rem 0;padding-left:1.2rem;color:#94a3b8}}
-  code{{background:#0f1f35;padding:1px 5px;border-radius:3px;font-size:.82rem}}
+  code{{background:#0a1f35;padding:1px 5px;border-radius:3px;font-size:.82rem}}
   .stats-grid td{{padding:4px 8px;border-bottom:1px solid #1e293b;font-size:.82rem}}
-  .btn{{background:#1e293b;color:#e2e8f0;border:1px solid #334155;
+  .btn{{background:#1e293b;color:#e2e8f0;border:1px solid #009cde;
         padding:4px 12px;border-radius:4px;cursor:pointer;margin-right:.4rem}}
-  .btn:hover{{background:#263348}}
+  .btn:hover{{background:#1a2f4a;color:#009cde}}
   .legend{{display:flex;gap:1.5rem;flex-wrap:wrap;margin-bottom:1rem}}
   .legend-score,.legend-sev{{flex:1;min-width:280px;background:#1e293b;
                               border-radius:8px;padding:1rem}}
-  .legend-title{{font-weight:bold;color:#38bdf8;margin-bottom:.6rem;font-size:.95rem}}
+  .legend-title{{font-weight:bold;color:#009cde;margin-bottom:.6rem;font-size:.95rem}}
   .legend-desc{{color:#94a3b8;font-size:.82rem;margin-bottom:.7rem;line-height:1.5}}
   .legend-table{{width:100%;border-collapse:collapse;font-size:.85rem}}
-  .legend-table th{{background:#0f1f35;color:#94a3b8;padding:8px;text-align:left}}
+  .legend-table th{{background:#0a1f35;color:#009cde;padding:8px;text-align:left}}
   .legend-table td{{border-bottom:1px solid #1e293b;padding:8px;color:#cbd5e1;vertical-align:top}}
   .legend-table tr:last-child td{{border-bottom:none}}
-  footer{{margin-top:2rem;color:#475569;font-size:.75rem;text-align:center}}
+  footer{{
+    margin-top:2rem;
+    color:#475569;
+    font-size:.75rem;
+    text-align:center;
+    border-top:1px solid #1e293b;
+    padding:1rem 0;
+  }}
+  footer span{{color:#009cde}}
 </style>
 <script>
   function toggle(h) {{
@@ -774,7 +822,18 @@ def export_html(result: ScanResult, path: str):
 </script>
 </head>
 <body>
-<h1>ADPulse Active Directory Security Report</h1>
+
+<!-- RSM branded header bar -->
+<div class="report-header">
+  <img src="images/rsmlogo.jpg" alt="RSM Logo">
+  <div class="header-divider"></div>
+  <div class="header-title">
+    <h1>Active Directory Security Report</h1>
+    <div class="header-sub">RSM Pulse &mdash; Powered by RSM</div>
+  </div>
+</div>
+
+<div class="report-body">
 <div class="meta">
   Domain: <strong>{result.domain}</strong> &nbsp;|&nbsp;
   DC: <strong>{result.dc_ip}</strong> &nbsp;|&nbsp;
@@ -841,7 +900,8 @@ def export_html(result: ScanResult, path: str):
   </div>
 </div>
 
-<footer>Generated by ADPulse Active Directory Security Scanner &mdash; for authorised use only</footer>
+<footer>Generated by <span>RSM Pulse</span> Active Directory Security Scanner &mdash; for authorised use only &mdash; &copy; RSM</footer>
+</div><!-- /.report-body -->
 </body>
 </html>"""
 
